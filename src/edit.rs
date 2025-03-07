@@ -1,6 +1,6 @@
 use crate::{dead_code::DeadCode, scope::Scope};
 use rnix::{
-    ast::{Inherit, LetIn, HasEntry},
+    ast::{HasEntry, Inherit, LetIn},
     NixLanguage, SyntaxKind,
 };
 use rowan::{api::SyntaxNode, ast::AstNode};
@@ -62,10 +62,9 @@ fn dead_to_edit(dead_code: DeadCode) -> Option<Edit> {
     let mut replacement = None;
     match dead_code.scope {
         Scope::LambdaPattern(pattern, _) => {
-            if pattern
-                .pat_bind()
-                .map_or(false, |at| at.ident().expect("at.ident").syntax() == &dead_code.binding.decl_node)
-            {
+            if pattern.pat_bind().is_some_and(|at| {
+                at.ident().expect("at.ident").syntax() == &dead_code.binding.decl_node
+            }) {
                 if let Some(pattern_bind_node) = pattern
                     .syntax()
                     .children()
@@ -87,7 +86,7 @@ fn dead_to_edit(dead_code: DeadCode) -> Option<Edit> {
             } else {
                 let mut tokens = pattern.syntax().children_with_tokens().skip_while(|node| {
                     node.as_node()
-                        .map_or(true, |node| *node != dead_code.binding.decl_node)
+                        .is_none_or(|node| *node != dead_code.binding.decl_node)
                 });
                 tokens.next();
                 for token in tokens {
@@ -161,7 +160,14 @@ fn remove_empty_scopes(node: &SyntaxNode<NixLanguage>, edits: &mut Vec<Edit>) {
                 && let_in.attrpath_values().next().is_none()
             {
                 let start = usize::from(node.text_range().start());
-                let end = usize::from(let_in.body().expect("let_in.body").syntax().text_range().start());
+                let end = usize::from(
+                    let_in
+                        .body()
+                        .expect("let_in.body")
+                        .syntax()
+                        .text_range()
+                        .start(),
+                );
                 edits.push(Edit {
                     start,
                     end,
